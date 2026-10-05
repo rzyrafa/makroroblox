@@ -142,10 +142,10 @@ debug_saved = set()
 
 # ============ TIMING (TRYB TURBO) ============
 LEAD_TIME     = 1.5        # Wcześniejszy start szukania (zanim minie cooldown, bot już wpisuje i wchodzi)
-WAIT_RESULTS  = 0.40       # Czas po wpisaniu do szukajki na odświeżenie listy
+WAIT_RESULTS  = 0.30       # Czas po wpisaniu do szukajki na odświeżenie listy
 WAIT_OPEN     = 0.30      # Krótki delay po kliknięciu (reszta to dynamiczne czekanie na nagłówek)
-WAIT_REFRESH  = 0.7       # Czas po kliknięciu refresh przed odczytem ceny
-WAIT_BACK     = 0.35       # Czas po kliknięciu wstecz
+WAIT_REFRESH  = 0.50      # Czas po kliknięciu refresh przed odczytem ceny
+WAIT_BACK     = 0.20       # Czas po kliknięciu wstecz
 PRICE_TIMEOUT = 3.5        # Max czas czekania na cenę (gdy serwer gry ma laga)
 PRICE_POLL    = 0.03       # Sprawdzanie ceny co 30ms
 EMPTY_SKIP    = 35         # Po tylu pustych klatkach bez przycisku (~1.1s) uznajemy brak oferty
@@ -1075,7 +1075,6 @@ def main():
     load_config()
     for t in TARGETS:
         t["last_refresh"] = 0.0
-        t["bought"] = False
 
     # GUI wywołuje main() wielokrotnie w tym samym procesie
     STATS.update({
@@ -1112,22 +1111,20 @@ def main():
             print(f"   (Możesz otworzyć ten plik, aby sprawdzić czy wszystkie ramki i punkty leżą idealnie na UI gry!)\n")
 
     try:
+        if not TARGETS:
+            print("\n⚠️ Brak przedmiotów do polowania — dodaj je w config.json / GUI.")
+            return
         while running:
             now = time.time()
             candidates = [t for t in TARGETS
-                          if not t["bought"] and now - t["last_refresh"] >= (t["refresh_wait"] - LEAD_TIME)]
+                          if now - t["last_refresh"] >= (t["refresh_wait"] - LEAD_TIME)]
             if not candidates:
-                upcoming = [t["last_refresh"] + (t["refresh_wait"] - LEAD_TIME) for t in TARGETS if not t["bought"]]
-                if not upcoming:
-                    print("\n🏆 Wszystkie przedmioty kupione!")
-                    return
                 safe_sleep(0.02)
                 continue
 
             target = max(candidates, key=lambda t: now - t["last_refresh"])
             if visit(target):
                 if STOP_AFTER_BUY:
-                    target["bought"] = True
                     print("\n🏆 Sukces! Przedmiot kupiony — zatrzymuję bota.")
                     return
                 print(f"✅ {target['name']} kupiony — poluję dalej bez zatrzymywania!")
