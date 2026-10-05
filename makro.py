@@ -35,7 +35,6 @@ if hasattr(sys, '_MEIPASS'):
                     pass
 
 # --- OCR: tesserocr (ultra szybki, ~4ms) z fallbackiem na pytesseract ---
-# --- OCR: tesserocr (ultra szybki, ~4ms) z fallbackiem na pytesseract ---
 TESS_WHITELIST = "0123456789"
 HAS_FAST_TESS = False
 _tess = None
@@ -194,7 +193,8 @@ def load_config():
         return
 
     try:
-        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+        # utf-8-sig: kalibrator.ps1 (Set-Content -Encoding UTF8) zapisuje plik z BOM
+        with open(CONFIG_PATH, "r", encoding="utf-8-sig") as f:
             cfg = json.load(f)
 
         if "targets" in cfg and cfg["targets"]:
@@ -1077,6 +1077,11 @@ def main():
         t["last_refresh"] = 0.0
         t["bought"] = False
 
+    # GUI wywołuje main() wielokrotnie w tym samym procesie
+    STATS.update({
+        "checks_total": 0, "buy_attempts": 0, "bought_items": [],
+        "popup_cancelled": 0, "blocks_wrong_item": 0, "fail_safe_recoveries": 0,
+    })
     STATS["start_time"] = time.time()
 
     print("=" * 60)

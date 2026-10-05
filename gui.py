@@ -138,7 +138,7 @@ class SniperApp(tk.Tk):
     def load_config(self):
         if os.path.exists(CONFIG_PATH):
             try:
-                with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+                with open(CONFIG_PATH, "r", encoding="utf-8-sig") as f:
                     data = json.load(f)
                 # Uzupełnij ewentualne brakujące klucze z domyślnych
                 for k, v in DEFAULT_CONFIG.items():
