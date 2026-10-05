@@ -61,6 +61,10 @@ DEFAULT_CONFIG = {
         "price_timeout": 3.5,
         "start_delay": 3
     },
+    "watchdog": {
+        "max_fails": 20,
+        "heartbeat_min": 60
+    },
     "targets": [
         {"name": "Davy Jones Chair", "query": "davy jones chair", "max": 200, "refresh_wait": 10},
         {"name": "Davy Jones Table", "query": "davy jones table", "max": 100, "refresh_wait": 10},
@@ -343,6 +347,20 @@ class SniperApp(tk.Tk):
         )
         chk.pack(anchor=tk.W)
 
+        self.watchdog_entries = {}
+        watchdog_defs = [
+            ("max_fails",     "Stop po tylu porażkach z rzędu (0 = wyłączone):"),
+            ("heartbeat_min", "Powiadomienie 'żyję' co ile minut (0 = wyłączone):"),
+        ]
+        for k, label_txt in watchdog_defs:
+            row = ttk.Frame(behav_box)
+            row.pack(fill=tk.X, pady=(4, 0))
+            ttk.Label(row, text=label_txt, width=48).pack(side=tk.LEFT)
+            ent = ttk.Entry(row, width=12)
+            ent.insert(0, str(DEFAULT_CONFIG["watchdog"][k]))
+            ent.pack(side=tk.LEFT)
+            self.watchdog_entries[k] = ent
+
     def _build_coords_tab(self):
         info_lbl = ttk.Label(
             self.tab_coords,
@@ -436,6 +454,12 @@ class SniperApp(tk.Tk):
             if k in timers:
                 ent.delete(0, tk.END)
                 ent.insert(0, str(timers[k]))
+
+        watchdog = self.config_data.get("watchdog", {})
+        for k, ent in self.watchdog_entries.items():
+            if k in watchdog:
+                ent.delete(0, tk.END)
+                ent.insert(0, str(watchdog[k]))
 
         # 4. Koordynaty profilu
         self.load_coords_for_current_res()
@@ -654,6 +678,14 @@ class SniperApp(tk.Tk):
             except ValueError:
                 pass
         self.config_data["timers"] = timers
+
+        watchdog = {}
+        for k, ent in self.watchdog_entries.items():
+            try:
+                watchdog[k] = float(ent.get().strip()) if k == "heartbeat_min" else int(ent.get().strip())
+            except ValueError:
+                pass
+        self.config_data["watchdog"] = watchdog
 
         # 4. Active Profile Coords
         if "profiles" not in self.config_data:

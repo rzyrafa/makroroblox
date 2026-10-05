@@ -7,6 +7,7 @@ import re
 import urllib.request
 import urllib.parse
 import json
+import threading
 import mss
 import mss.tools
 import cv2
@@ -152,6 +153,11 @@ EMPTY_SKIP    = 35         # Po tylu pustych klatkach bez przycisku (~1.1s) uzna
 MIN_WHITE     = 150
 START_DELAY   = 3          # Odliczanie na start (sekundy)
 
+# ============ STRAŻNIK (WATCHDOG) ============
+MAX_FAILS     = 20         # Tyle porażek z rzędu (brak nagłówka / brak odczytu ceny) = zatrzymanie + powiadomienie (0 = wyłączone)
+HEARTBEAT_MIN = 60         # Co ile minut wysłać "żyję" na telefon (0 = wyłączone)
+FAIL_RETRY    = 2.0        # Przerwa (s) przed ponowną próbą przedmiotu, który się nie otworzył
+
 # ============ WSPÓŁRZĘDNE ============
 SEARCH_BOX  = (1777, 448)
 ITEM_1      = (1050, 608)
@@ -188,6 +194,7 @@ def load_config():
     global POPUP_CONFIRM_BTN, POPUP_CANCEL_BTN, POPUP_SELECT_ITEM_X, MARKET_BUY_TAB, MARKET_SELL_TAB
     global ITEM_PRICE, ITEM_HEADER_REGION, POPUP_TEXT_REGION
     global FAILSAFE_POPUP_X_CHECK, FAILSAFE_SELL_TAB_CHECK, CURRENT_RES
+    global MAX_FAILS, HEARTBEAT_MIN
 
     if not os.path.exists(CONFIG_PATH):
         return
@@ -219,6 +226,11 @@ def load_config():
             WAIT_BACK     = float(tm.get("wait_back", WAIT_BACK))
             PRICE_TIMEOUT = float(tm.get("price_timeout", PRICE_TIMEOUT))
             START_DELAY   = int(tm.get("start_delay", START_DELAY))
+
+        if "watchdog" in cfg:
+            wd = cfg["watchdog"]
+            MAX_FAILS     = int(wd.get("max_fails", MAX_FAILS))
+            HEARTBEAT_MIN = float(wd.get("heartbeat_min", HEARTBEAT_MIN))
 
         CURRENT_RES = cfg.get("resolution", "1440p")
         profiles = cfg.get("profiles", {})
@@ -260,6 +272,7 @@ STATS = {
     "popup_cancelled": 0,       # Liczba anulowań w oknie potwierdzenia
     "blocks_wrong_item": 0,     # Liczba zablokowanych pomyłek (np. Wooden Chair)
     "fail_safe_recoveries": 0,  # Liczba automatycznych napraw (okienko Select an Item / Sell tab)
+    "fails_in_row": 0,          # Porażki z rzędu (watchdog)
 }
 
 def _kill():
@@ -812,6 +825,11 @@ def verify_popup_text(target_name, max_price, currency_type, text):
     return True, "Zgodne z ofertą"
 
 def send_notification(message, title="Roblox Sniper"):
+    """Wysyła powiadomienie w tle, żeby wolne API nie blokowało snajpienia."""
+    # daemon=False: w trybie konsolowym proces poczeka na wysłanie ostatniego powiadomienia przed wyjściem
+    threading.Thread(target=_send_notification_sync, args=(message, title), daemon=False).start()
+
+def _send_notification_sync(message, title):
     """Wysyła powiadomienie na telefon (WhatsApp / Discord / ntfy)."""
     # 1. WhatsApp (CallMeBot)
     if WHATSAPP_PHONE and WHATSAPP_APIKEY:
@@ -969,6 +987,8 @@ def visit(target):
         if not did_recover and opened_title:
             click(*BACK_BTN, delay=WAIT_BACK, label="Wstecz")
 
+        STATS["fails_in_row"] += 1
+        target["retry_at"] = time.time() + FAIL_RETRY
         lap("back_wrong_item")
         _print_profile(prof)
         return False
@@ -986,6 +1006,11 @@ def visit(target):
     # 5. Sprawdzenie ceny i waluty
     result, currency, tries, nz = wait_for_price(target['name'])
     lap(f"ocr({tries})")
+
+    if result is None:
+        STATS["fails_in_row"] += 1
+    else:
+        STATS["fails_in_row"] = 0
 
     if result == SKIP_TEXT:
         print(f"   ℹ️ brak ceny / Twoja oferta — skip")
@@ -1075,13 +1100,17 @@ def main():
     load_config()
     for t in TARGETS:
         t["last_refresh"] = 0.0
+        t["last_visit"] = 0.0
+        t["retry_at"] = 0.0
 
     # GUI wywołuje main() wielokrotnie w tym samym procesie
     STATS.update({
         "checks_total": 0, "buy_attempts": 0, "bought_items": [],
         "popup_cancelled": 0, "blocks_wrong_item": 0, "fail_safe_recoveries": 0,
+        "fails_in_row": 0,
     })
     STATS["start_time"] = time.time()
+    last_heartbeat = STATS["start_time"]
 
     print("=" * 60)
     print(f"🎯 MULTI-SNIPER (TRYB TURBO | PROFIL: {CURRENT_RES.upper()})")
@@ -1091,6 +1120,7 @@ def main():
     for t in TARGETS:
         print(f"   • {t['name']}: max {t['max']} 💎")
     print("🛑 KILL SWITCH: F8 / ESC")
+    print(f"🚨 WATCHDOG: stop po {MAX_FAILS} porażkach z rzędu | 💓 heartbeat co {HEARTBEAT_MIN:g} min (0 = wył.)")
     if DEBUG_MODE:
         print(f"📁 FOLDER DIAGNOSTYCZNY: {DEBUG_DIR}")
     print("=" * 60)
@@ -1117,17 +1147,36 @@ def main():
         while running:
             now = time.time()
             candidates = [t for t in TARGETS
-                          if now - t["last_refresh"] >= (t["refresh_wait"] - LEAD_TIME)]
+                          if now - t["last_refresh"] >= (t["refresh_wait"] - LEAD_TIME)
+                          and now >= t["retry_at"]]
             if not candidates:
                 safe_sleep(0.02)
                 continue
 
-            target = max(candidates, key=lambda t: now - t["last_refresh"])
+            # last_visit zamiast last_refresh: przedmiot, który się nie otworzył (brak refreshu),
+            # nie może w kółko wygrywać kolejki i blokować pozostałych
+            target = min(candidates, key=lambda t: t["last_visit"])
+            target["last_visit"] = now
             if visit(target):
                 if STOP_AFTER_BUY:
                     print("\n🏆 Sukces! Przedmiot kupiony — zatrzymuję bota.")
                     return
                 print(f"✅ {target['name']} kupiony — poluję dalej bez zatrzymywania!")
+
+            if MAX_FAILS > 0 and STATS["fails_in_row"] >= MAX_FAILS:
+                msg = (f"{STATS['fails_in_row']} porażek z rzędu (brak nagłówka / ceny). "
+                       f"Możliwe rozłączenie, kick, aktualizacja gry lub przesunięte okno — zatrzymuję bota.")
+                print(f"\n🚨 [WATCHDOG] {msg}")
+                send_notification(msg, title="🚨 Sniper zatrzymany")
+                return
+
+            if HEARTBEAT_MIN > 0 and time.time() - last_heartbeat >= HEARTBEAT_MIN * 60:
+                last_heartbeat = time.time()
+                m = int((last_heartbeat - STATS["start_time"]) / 60)
+                send_notification(
+                    f"Działam od {m} min | sprawdzone oferty: {STATS['checks_total']} | "
+                    f"kupione: {len(STATS['bought_items'])}",
+                    title="💓 Sniper żyje")
     finally:
         print_session_summary()
 
