@@ -1,0 +1,18 @@
+# Python & wirtualne środowisko
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+
+# Wyniki budowania i duże pliki binarne
+build/
+dist/
+*.exe
+debug/
+
+# Pliki tymczasowe / kopie zapasowe
+*.bak
+*.tmp
+*.log

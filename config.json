@@ -1,0 +1,191 @@
+{
+    "resolution": "1440p",
+    "stop_after_buy": false,
+    "ntfy_topic": "botdorestaracji2115",
+    "discord_webhook": "",
+    "whatsapp_phone": "",
+    "whatsapp_apikey": "",
+    "timers": {
+        "lead_time": 1.5,
+        "wait_results": 0.3,
+        "wait_open": 0.3,
+        "wait_refresh": 0.5,
+        "wait_back": 0.2,
+        "price_timeout": 3.5,
+        "start_delay": 3.0
+    },
+    "targets": [
+        {
+            "name": "Davy Jones Chair",
+            "query": "davy jones chair",
+            "max": 200,
+            "refresh_wait": 10
+        },
+        {
+            "name": "Davy Jones Table",
+            "query": "davy jones table",
+            "max": 100,
+            "refresh_wait": 10
+        },
+        {
+            "name": "Sunken Chair",
+            "query": "sunken chair",
+            "max": 70,
+            "refresh_wait": 10
+        },
+        {
+            "name": "Sunken Table",
+            "query": "sunken table",
+            "max": 60,
+            "refresh_wait": 10
+        }
+    ],
+    "profiles": {
+        "1440p": {
+            "label": "2560x1440 (Komputer stacjonarny)",
+            "search_box": [
+                1777,
+                448
+            ],
+            "item_1": [
+                1050,
+                608
+            ],
+            "refresh_btn": [
+                1668,
+                326
+            ],
+            "buy_btn": [
+                1714,
+                1041
+            ],
+            "back_btn": [
+                726,
+                461
+            ],
+            "popup_confirm_btn": [
+                1082,
+                887
+            ],
+            "popup_cancel_btn": [
+                1478,
+                886
+            ],
+            "popup_select_item_x": [
+                1818,
+                358
+            ],
+            "market_buy_tab": [
+                750,
+                580
+            ],
+            "market_sell_tab": [
+                750,
+                470
+            ],
+            "item_price": {
+                "top": 1030,
+                "left": 1573,
+                "width": 280,
+                "height": 50
+            },
+            "item_header_region": {
+                "top": 435,
+                "left": 770,
+                "width": 650,
+                "height": 55
+            },
+            "popup_text_region": {
+                "top": 680,
+                "left": 860,
+                "width": 840,
+                "height": 80
+            },
+            "failsafe_popup_x_check": {
+                "top": 350,
+                "left": 1785,
+                "width": 30,
+                "height": 25
+            },
+            "failsafe_sell_tab_check": {
+                "top": 460,
+                "left": 740,
+                "width": 20,
+                "height": 20
+            }
+        },
+        "1080p": {
+            "label": "1920x1080 (Laptop)",
+            "search_box": [
+                1348,
+                327
+            ],
+            "item_1": [
+                800,
+                420
+            ],
+            "refresh_btn": [
+                1277,
+                226
+            ],
+            "buy_btn": [
+                1252,
+                791
+            ],
+            "back_btn": [
+                526,
+                330
+            ],
+            "popup_confirm_btn": [
+                800,
+                669
+            ],
+            "popup_cancel_btn": [
+                1106,
+                666
+            ],
+            "popup_select_item_x": [
+                1108,
+                202
+            ],
+            "market_buy_tab": [
+                530,
+                427
+            ],
+            "market_sell_tab": [
+                522,
+                327
+            ],
+            "item_price": {
+                "top": 773,
+                "left": 1216,
+                "width": 189,
+                "height": 41
+            },
+            "item_header_region": {
+                "top": 308,
+                "left": 591,
+                "width": 303,
+                "height": 40
+            },
+            "popup_text_region": {
+                "top": 508,
+                "left": 649,
+                "width": 537,
+                "height": 60
+            },
+            "failsafe_popup_x_check": {
+                "top": 100,
+                "left": 100,
+                "width": 1,
+                "height": 1
+            },
+            "failsafe_sell_tab_check": {
+                "top": 100,
+                "left": 100,
+                "width": 1,
+                "height": 1
+            }
+        }
+    }
+}
