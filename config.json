@@ -14,6 +14,10 @@
         "price_timeout": 3.5,
         "start_delay": 3.0
     },
+    "watchdog": {
+        "max_fails": 20,
+        "heartbeat_min": 60
+    },
     "targets": [
         {
             "name": "Davy Jones Chair",

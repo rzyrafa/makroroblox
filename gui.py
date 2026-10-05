@@ -5,6 +5,7 @@ import json
 import time
 import subprocess
 import threading
+import queue
 import urllib.request
 import urllib.parse
 import tkinter as tk
@@ -53,12 +54,16 @@ DEFAULT_CONFIG = {
     "whatsapp_apikey": "",
     "timers": {
         "lead_time": 1.5,
-        "wait_results": 0.40,
+        "wait_results": 0.30,
         "wait_open": 0.30,
-        "wait_refresh": 0.70,
-        "wait_back": 0.35,
+        "wait_refresh": 0.50,
+        "wait_back": 0.20,
         "price_timeout": 3.5,
         "start_delay": 3
+    },
+    "watchdog": {
+        "max_fails": 20,
+        "heartbeat_min": 60
     },
     "targets": [
         {"name": "Davy Jones Chair", "query": "davy jones chair", "max": 200, "refresh_wait": 10},
@@ -117,10 +122,31 @@ class SniperApp(tk.Tk):
         self.proc = None
         self.log_reader_thread = None
         self.config_data = self.load_config()
+        # Tkinter nie jest thread-safe — wątek makra tylko wrzuca do kolejki, a główny wątek ją opróżnia
+        self.ui_queue = queue.Queue()
 
         self._init_styles()
         self._build_ui()
         self.populate_data()
+        self._drain_ui_queue()
+
+    def _drain_ui_queue(self):
+        chunks = []
+        try:
+            while True:
+                item = self.ui_queue.get_nowait()
+                if callable(item):
+                    if chunks:
+                        self.log_raw("".join(chunks))
+                        chunks = []
+                    item()
+                else:
+                    chunks.append(item)
+        except queue.Empty:
+            pass
+        if chunks:
+            self.log_raw("".join(chunks))
+        self.after(50, self._drain_ui_queue)
 
     def _init_styles(self):
         self.style = ttk.Style(self)
@@ -138,7 +164,7 @@ class SniperApp(tk.Tk):
     def load_config(self):
         if os.path.exists(CONFIG_PATH):
             try:
-                with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+                with open(CONFIG_PATH, "r", encoding="utf-8-sig") as f:
                     data = json.load(f)
                 # Uzupełnij ewentualne brakujące klucze z domyślnych
                 for k, v in DEFAULT_CONFIG.items():
@@ -291,21 +317,21 @@ class SniperApp(tk.Tk):
 
         self.timer_entries = {}
         timer_defs = [
-            ("lead_time",    "Lead Time (wcześniejszy start szukania):", "1.5"),
-            ("wait_results", "Wait Results (czas po wpisaniu do szukajki):", "0.40"),
-            ("wait_open",    "Wait Open (czas otwierania oferty):", "0.30"),
-            ("wait_refresh", "Wait Refresh (czas po refreshu przed OCR):", "0.70"),
-            ("wait_back",    "Wait Back (czas powrotu wstecz):", "0.35"),
-            ("price_timeout","Price Timeout (max czas czekania na cenę):", "3.5"),
-            ("start_delay",  "Start Delay (odliczanie przed startem):", "3")
+            ("lead_time",    "Lead Time (wcześniejszy start szukania):"),
+            ("wait_results", "Wait Results (czas po wpisaniu do szukajki):"),
+            ("wait_open",    "Wait Open (czas otwierania oferty):"),
+            ("wait_refresh", "Wait Refresh (czas po refreshu przed OCR):"),
+            ("wait_back",    "Wait Back (czas powrotu wstecz):"),
+            ("price_timeout","Price Timeout (max czas czekania na cenę):"),
+            ("start_delay",  "Start Delay (odliczanie przed startem):")
         ]
 
-        for i, (k, label_txt, def_val) in enumerate(timer_defs):
+        for k, label_txt in timer_defs:
             row = ttk.Frame(timers_box)
             row.pack(fill=tk.X, pady=2)
             ttk.Label(row, text=label_txt, width=42).pack(side=tk.LEFT)
             ent = ttk.Entry(row, width=12)
-            ent.insert(0, def_val)
+            ent.insert(0, str(DEFAULT_CONFIG["timers"][k]))
             ent.pack(side=tk.LEFT)
             self.timer_entries[k] = ent
 
@@ -320,6 +346,20 @@ class SniperApp(tk.Tk):
             variable=self.stop_after_buy_var
         )
         chk.pack(anchor=tk.W)
+
+        self.watchdog_entries = {}
+        watchdog_defs = [
+            ("max_fails",     "Stop po tylu porażkach z rzędu (0 = wyłączone):"),
+            ("heartbeat_min", "Powiadomienie 'żyję' co ile minut (0 = wyłączone):"),
+        ]
+        for k, label_txt in watchdog_defs:
+            row = ttk.Frame(behav_box)
+            row.pack(fill=tk.X, pady=(4, 0))
+            ttk.Label(row, text=label_txt, width=48).pack(side=tk.LEFT)
+            ent = ttk.Entry(row, width=12)
+            ent.insert(0, str(DEFAULT_CONFIG["watchdog"][k]))
+            ent.pack(side=tk.LEFT)
+            self.watchdog_entries[k] = ent
 
     def _build_coords_tab(self):
         info_lbl = ttk.Label(
@@ -414,6 +454,12 @@ class SniperApp(tk.Tk):
             if k in timers:
                 ent.delete(0, tk.END)
                 ent.insert(0, str(timers[k]))
+
+        watchdog = self.config_data.get("watchdog", {})
+        for k, ent in self.watchdog_entries.items():
+            if k in watchdog:
+                ent.delete(0, tk.END)
+                ent.insert(0, str(watchdog[k]))
 
         # 4. Koordynaty profilu
         self.load_coords_for_current_res()
@@ -633,6 +679,14 @@ class SniperApp(tk.Tk):
                 pass
         self.config_data["timers"] = timers
 
+        watchdog = {}
+        for k, ent in self.watchdog_entries.items():
+            try:
+                watchdog[k] = float(ent.get().strip()) if k == "heartbeat_min" else int(ent.get().strip())
+            except ValueError:
+                pass
+        self.config_data["watchdog"] = watchdog
+
         # 4. Active Profile Coords
         if "profiles" not in self.config_data:
             self.config_data["profiles"] = {}
@@ -727,7 +781,7 @@ class SniperApp(tk.Tk):
             old_stderr = sys.stderr
 
             try:
-                redirector = Redirector(lambda s: self.after(0, lambda: self.log_raw(s)))
+                redirector = Redirector(self.ui_queue.put)
                 sys.stdout = redirector
                 sys.stderr = redirector
                 makro.running = True
@@ -736,11 +790,11 @@ class SniperApp(tk.Tk):
             except Exception as e:
                 import traceback
                 tb = traceback.format_exc()
-                self.after(0, lambda: self.log(f"⚠️ Błąd wykonania makra:\n{tb}"))
+                self.ui_queue.put(f"⚠️ Błąd wykonania makra:\n{tb}\n")
             finally:
                 sys.stdout = old_stdout
                 sys.stderr = old_stderr
-                self.after(0, self._on_macro_exit)
+                self.ui_queue.put(self._on_macro_exit)
 
         self.macro_thread = threading.Thread(target=run_thread, daemon=True)
         self.macro_thread.start()
